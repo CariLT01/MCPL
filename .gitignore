@@ -1,0 +1,36 @@
+
+# Don't include tokens
+signing/*
+
+# Don't include copyrighted assets
+dist/assets/indexes/*
+dist/assets/objects/*
+data/*
+build/*
+dist/java/*
+dist/libraries/*
+launcher/data.7z
+
+# Don't include Java (might have license)
+java/*
+
+# Don't include internal management
+mods/*
+
+# Don't include private & public key
+private.key
+public.key
+
+# Don't include token.go
+launcher/token.go
+launcher/token.go_copy.txt
+
+# Don't include tests
+launcher/12111_FA0183
+launcher/MinecraftPortableLauncher.exe
+
+# Don't include pycache
+__pycache__/
+
+# Don't include lib list
+libraries_list.txt
