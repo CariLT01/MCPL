@@ -4,7 +4,7 @@ Custom tooling to get Minecraft Java edition to run portably in a single self-ex
 
 # Features
 These tools allow you to create a fully self-contained executable that will aid you in launching Minecraft: Java Edition portably without prior installation or any system dependencies like DLLs that may cause certain problems. It ensures that it will run predictably on any Windows device. Extra features are included:
-- StealthPipe allows Minecraft Open to LAN to work on networks that traditionally block it by rerouting it through WebSockets.
+- StealthPipe allows Minecraft Open to LAN to work on networks that traditionally block it by rerouting it through WebSockets and a relay. You can see its own technical report under another repository.
 - Optimization mods like Sodium & Lithium ensure higher performance on lower-end hardware and fixes many issues with different GPU drivers.
 
 ## Creating your environment
