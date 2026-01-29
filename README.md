@@ -8,6 +8,9 @@ These tools allow you to create a fully self-contained executable that will aid 
 - Optimization mods like Sodium & Lithium ensure higher performance on lower-end hardware and fixes many issues with different GPU drivers.
 
 ## Creating your environment
+
+For creating your own environment, you must have **extensive prior knowledge in Python, and Go, and general knowledge about Minecraft, operating systems, and build pipelines**. These instructions will not provide troubleshooting steps, so you are on your own if you do encounter issues (although artificial assistant will help).
+
 There are many steps required as to creating your own portable EXE for personal use. For this, you need first, create the zip contents, zip it up, and compile with the launcher to create a runnable Go binary. This project was designed to work with Windows only, so you may have many issues doing this for any other operating system other than Windows, such as Linux.
 
 ### Creating the distribution contents
