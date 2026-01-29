@@ -34,3 +34,7 @@ __pycache__/
 
 # Don't include lib list
 libraries_list.txt
+
+# Don't include worldsync
+
+dist/mods/world-sync*
