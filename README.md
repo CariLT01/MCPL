@@ -7,7 +7,8 @@ These tools allow you to create a fully self-contained executable that will aid 
 - StealthPipe allows Minecraft Open to LAN to work on networks that traditionally block it by rerouting it through WebSockets and a relay. You can see its own technical report under another repository.
 - Optimization mods like Sodium & Lithium ensure higher performance on lower-end hardware and fixes many issues with different GPU drivers.
 
-## Creating your environment
+# Creating your environment
+It should be noted that these steps are not trivial to follow if you aren't a developer or software engineer.
 
 For creating your own environment, you must have **extensive prior knowledge in Python, and Go, and general knowledge about Minecraft, operating systems, and build pipelines**. These instructions will not provide troubleshooting steps, so you are on your own if you do encounter issues (although artificial assistant will help).
 
