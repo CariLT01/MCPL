@@ -549,7 +549,7 @@ func main() {
 		licenseLabel.TextSize = 16
 		licenseLabel.Move(fyne.NewPos(12, 250))
 
-		multiplayerNote := canvas.NewText("Changelog: update dependencies", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		multiplayerNote := canvas.NewText("Changelog: update dependencies and improve error logging", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
 		multiplayerNote.TextSize = 12
 		multiplayerNote.Move(fyne.NewPos(12, 300))
 
