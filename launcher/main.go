@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -33,7 +32,7 @@ import (
 
 var VERSION = "1.21.11 • Fabric 0.18.3"
 var VERSION_DIR_STRING = "12111_FA0183"
-var LAUNCHER_VERSION = "L1.1"
+var LAUNCHER_VERSION = "L1.1.2"
 
 // REMEMBER TO CHANGE FOR TOKENS
 var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
@@ -52,7 +51,7 @@ func checkToken() {
 		return pubKey, nil
 	})
 	if err != nil || !token.Valid {
-		os.Exit(1) // silently fail
+		os.Exit(1)
 	}
 }
 
@@ -156,6 +155,10 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 	}
 	defer r.Close()
 
+	// Create stringbuilder
+	var statusBuf strings.Builder
+	statusBuf.Grow(128)
+
 	// 2. Calculate total size for progress percentage
 	var totalBytes int64
 	for _, f := range r.File {
@@ -171,13 +174,21 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 
 	createdDirs := make(map[string]bool)
 	destDirClean := filepath.Clean(destDir)
-	copyBuf := make([]byte, 1024*1024) // 1MB buffer
+	copyBuf := make([]byte, 1024*1024*8) // 4MB buffer
 
 	for _, f := range r.File {
-		path := filepath.Join(destDir, f.Name)
+		if f.FileInfo().IsDir() {
+			path := filepath.Join(destDirClean, f.Name)
+			os.MkdirAll(path, 0755)
+			createdDirs[path] = true
+		}
+	}
 
+	for _, f := range r.File {
 		// Security: ZipSlip check
-		if !strings.HasPrefix(filepath.Clean(path), destDirClean+string(os.PathSeparator)) {
+		cleanName := filepath.Clean(f.Name)
+		path := filepath.Join(destDirClean, cleanName)
+		if !strings.HasPrefix(path, destDirClean+string(os.PathSeparator)) {
 			continue
 		}
 
@@ -207,14 +218,11 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 			return err
 		}
 
-		// Optimization: Buffered Writer
-		bufferedWriter := bufio.NewWriterSize(fDest, 1024*1024)
-
 		// Manual copy loop
 		for {
 			n, readErr := rc.Read(copyBuf)
 			if n > 0 {
-				if _, writeErr := bufferedWriter.Write(copyBuf[:n]); writeErr != nil {
+				if _, writeErr := fDest.Write(copyBuf[:n]); writeErr != nil {
 					fDest.Close()
 					rc.Close()
 					return writeErr
@@ -223,6 +231,7 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 
 				// Throttled Progress Bar Update (every 50ms)
 				// We don't throttle the text here because we update it once per file above
+
 				if time.Since(lastBarUpdate) > 50*time.Millisecond {
 					progress := float32(processedBytes) / float32(totalBytes)
 					updateProgressBar(app, progressBar, progress)
@@ -233,7 +242,13 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 					estimatedTimeRemaining := (1 - progress) * float32(elapsed) / progress
 					formattedTimeRemaining := formatSeconds(int(math.Round(float64(estimatedTimeRemaining))))
 
-					updateProgressBarText(app, statusText, "Extracting "+" ("+formattedTimeRemaining+" remaining): "+TruncateMiddle(f.Name, 32))
+					statusBuf.Reset()
+					statusBuf.WriteString("Extracting (")
+					statusBuf.WriteString(formattedTimeRemaining)
+					statusBuf.WriteString(" remaining): ")
+					statusBuf.WriteString(TruncateMiddle(f.Name, 32))
+
+					updateProgressBarText(app, statusText, statusBuf.String())
 				}
 			}
 			if readErr == io.EOF {
@@ -246,7 +261,6 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 			}
 		}
 
-		bufferedWriter.Flush()
 		fDest.Close()
 		rc.Close()
 	}
@@ -280,6 +294,7 @@ func launchGame(username string) {
 	err := cmd.Start()
 	if err != nil {
 		fmt.Println("Failed to launch helper:", err)
+		showErrorLog(err, "launch instance")
 		return
 	}
 
@@ -308,11 +323,16 @@ func askAndLaunch(window fyne.Window) {
 	// 3. Show it
 	inputDialog.Resize(fyne.NewSize(400, 250))
 	inputDialog.Show()
+
 }
 
 func fileExists(filename string) bool {
 	_, err := os.Stat(filename)
 	return !errors.Is(err, os.ErrNotExist)
+}
+
+func showErrorLog(err error, while string) {
+	showError("Application Error during an operation: "+while, "Application error that may or may not be fatal depending on the context.\nOperation: "+while+"\nError: "+err.Error())
 }
 
 func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text) {
@@ -338,14 +358,21 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 
 	if fileExists(launcherExe) {
 		os.Remove(launcherExe)
+
 	}
 
 	extractFiles(app, progressBar, statusText)
 
 	tmpPath := filepath.Join(baseDir, "tmp.7z")
 
-	unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText)
-	os.Remove("tmp.7z")
+	err := unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText)
+	if err != nil {
+		showErrorLog(err, "extract files")
+	}
+	err = os.Remove("tmp.7z")
+	if err != nil {
+		showErrorLog(err, "remove tmp.7z")
+	}
 	fileLock.Unlock()
 	markInstallationComplete(gameDir)
 }
@@ -354,9 +381,16 @@ func showError(title string, message string) {
 	titleText, _ := windows.UTF16FromString(title)
 	messageText, _ := windows.UTF16FromString(message)
 
-	windows.MessageBox(0, &messageText[0], &titleText[0], 0)
-}
+	const MB_OK = 0x00000000
+	const MB_ICONERROR = 0x00000010
+	const MB_TOPMOST = 0x00040000
 
+	// Combine flags
+	flags := MB_OK | MB_ICONERROR | MB_TOPMOST
+
+	// hwnd = 0 means no owner, or use your window handle here
+	windows.MessageBox(0, &messageText[0], &titleText[0], uint32(flags))
+}
 func getInstallationHash() string {
 	return LAUNCHER_VERSION + "-" + VERSION_DIR_STRING
 }
@@ -366,6 +400,7 @@ func markInstallationComplete(path string) {
 
 	f, err := os.Create(markerPath)
 	if err != nil {
+		showErrorLog(err, "mark installation complete")
 		return
 	}
 
@@ -375,6 +410,7 @@ func markInstallationComplete(path string) {
 
 	_, err = f.WriteString(content)
 	if err != nil {
+		showErrorLog(err, "write mark installation complete")
 		return
 	}
 }
@@ -382,6 +418,7 @@ func markInstallationComplete(path string) {
 func openMarkerFileAndCheckVersion(path string) bool {
 	content, err := os.ReadFile(path)
 	if err != nil {
+		showErrorLog(err, "read version marker")
 		return false
 	}
 	if string(content) == getInstallationHash() {
@@ -405,7 +442,7 @@ func tryLock(path string) *flock.Flock {
 	}
 
 	if !locked {
-		showError("More than one instance detected", "Another instance of Minecraft Portable is installing in this directory. Please close this instance and wait for the other one to finish.")
+		showError("More than one instance detected", "Unable to start. Another instance is running.")
 		os.Exit(1)
 	}
 
@@ -433,12 +470,32 @@ func initializeApp(app fyne.App, window fyne.Window, progressBar *canvas.Rectang
 			if openMarkerFileAndCheckVersion(markerPath) == true {
 				brokenInstallation = false
 			} else {
-				showError("Version mismatch", "This installation is either outdated or too new for this launcher (most likely outdated). It will be reinstalled to match this launcher's version. Your saves and configuration will not be deleted. However, the MODS folder will be deleted and replaced, so please backup any additional mods you installed.")
+				showError("MCPL -- Version mismatch",
+					`
+This installation's launcher or game version does not match this one's version. It will be reinstalled to match this launcher's version. Your saves and configuration will be kept intact.
+
+As a temporary solution to installation integrity, the contents of the following folders will be replaced:
+
+  - Mods
+
+Backup any important files if needed before pressing OK or closing this dialog.
+If you wish to cancel, close the launcher window. Otherwise, the installation will proceed.
+			`)
 				brokenInstallation = true
 			}
 		} else {
 			brokenInstallation = true
-			showError("Incomplete Installation", "This installation is incomplete. It will be reinstalled. Your saves and configuration will not be deleted. However, the MODS folder will be deleted and replaced, so please backup any additional mods you installed.")
+			showError("MCPL -- Incomplete Installation",
+				`
+This installation is incomplete. It will be reinstalled. Your saves and configuration will be kept intact.
+
+As a temporary solution to installation integrity, the contents of the following folders will be replaced:
+
+  - Mods
+
+Backup any important files if needed before pressing OK or closing this dialog.
+If you wish to cancel, close the launcher window. Otherwise, the installation will proceed.
+			`)
 		}
 	} else {
 		installationFound = false
@@ -469,13 +526,13 @@ func main() {
 
 	if drv, ok := drv.(desktop.Driver); ok {
 		launcherWindow := drv.CreateSplashWindow()
-		launcherWindow.SetTitle("Minecraft Portable")
+		launcherWindow.SetTitle("MCPL")
 
 		background := canvas.NewImageFromResource(resourceLauncherbackgroundPng)
 		background.FillMode = canvas.ImageFillContain
 		background.Resize(fyne.NewSize(640, 400))
 
-		softwareTitleText := canvas.NewText("Minecraft Portable", color.Black)
+		softwareTitleText := canvas.NewText("MCPL "+LAUNCHER_VERSION, color.Black)
 		softwareTitleText.TextStyle = fyne.TextStyle{Bold: true}
 		softwareTitleText.TextSize = 48
 		softwareTitleText.Move(fyne.NewPos(10, 20))
@@ -492,7 +549,7 @@ func main() {
 		licenseLabel.TextSize = 16
 		licenseLabel.Move(fyne.NewPos(12, 250))
 
-		multiplayerNote := canvas.NewText("New: synchronize worlds with WorldSync", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		multiplayerNote := canvas.NewText("Changelog: update dependencies", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
 		multiplayerNote.TextSize = 12
 		multiplayerNote.Move(fyne.NewPos(12, 300))
 

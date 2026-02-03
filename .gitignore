@@ -38,3 +38,7 @@ libraries_list.txt
 # Don't include worldsync
 
 dist/mods/world-sync*.jar
+
+# Don't include secrets
+
+SECRET

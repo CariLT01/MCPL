@@ -6,18 +6,11 @@ import asyncio
 import aiohttp
 import aiofiles
 import subprocess
-from mutagen.oggvorbis import OggVorbis
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from BatchedAssetDownloader import download_files
 
 
-def get_ogg_duration(file_path):
-    try:
-        audio = OggVorbis(file_path)
-        return audio.info.length
-    except Exception:
-        return 0.0
 
 def crunch_file(data):
     """

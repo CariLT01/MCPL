@@ -12,7 +12,7 @@ import re
 
 TOKEN_PATH = "signing/"
 LAUNCHER_CODE_PATH = "launcher/token.go"
-VERSION_NAME = "MC_1.21.11_L1"
+VERSION_NAME = "MC_1.21.11_L1.1"
 
 token_files: list[str] = []
 for file in os.listdir(TOKEN_PATH):
