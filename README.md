@@ -28,7 +28,7 @@ There are many steps required as to creating your own portable EXE for personal 
 You will need to download a Java runtime as a ZIP and etract it under the Java folder in dist. This will allow Minecraft to run in the first place. A JRE is recommended over a JDK, since JREs are smaller and take up less space than a JDK. Any Java runtime should work, like Hotspot or Adoptium.
 
 ### Creating the distribution contents
-To get started, you need to have some knowledge about Python and its packages. Since no requirements.txt exists yet in the project, you will have to create one manually and figure out the package names to install.
+Broad steps: 
 
 1. **Install Python**: Download and install Python here: [https://www.python.org](https://www.python.org)
    If needed, refresh the terminal session to register the new environment variables.
