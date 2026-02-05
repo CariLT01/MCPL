@@ -361,11 +361,14 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 
 	}
 
-	extractFiles(app, progressBar, statusText)
+	err := extractFiles(app, progressBar, statusText)
+	if err != nil {
+		showErrorLog(err, "unpack files")
+	}
 
 	tmpPath := filepath.Join(baseDir, "tmp.7z")
 
-	err := unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText)
+	err = unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText)
 	if err != nil {
 		showErrorLog(err, "extract files")
 	}

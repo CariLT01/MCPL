@@ -1,6 +1,7 @@
 
 # Don't include tokens
-signing/*
+signing/token*
+signing/*.key
 
 # Don't include copyrighted assets
 dist/assets/indexes/*
