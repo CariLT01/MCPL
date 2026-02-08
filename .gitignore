@@ -43,3 +43,6 @@ dist/mods/world-sync*.jar
 # Don't include secrets
 
 SECRET
+
+# Don't include link
+UploadUrl.py
