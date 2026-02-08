@@ -1,0 +1,1 @@
+UPLOAD_URL = "https://csmv-my.sharepoint.com/my?id=%2Fpersonal%2F2473858%5Fcsmv%5Fqc%5Fca%2FDocuments%2FSecondaire%2FSecondaire%203%2Fdev&viewid=9c0d0ee0%2Dca45%2D4c6b%2D9d5d%2Dea5db53331aa"
