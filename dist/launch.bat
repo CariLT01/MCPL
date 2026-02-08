@@ -1,0 +1,21 @@
+
+@echo off
+
+set CP="libraries/minecraft-1.21.11-client.jar;;libraries/lz4-java-1.8.1.jar;libraries/azure-json-1.4.0.jar;libraries/oshi-core-6.9.0.jar;libraries/gson-2.13.2.jar;libraries/failureaccess-1.0.3.jar;libraries/guava-33.5.0-jre.jar;libraries/icu4j-77.1.jar;libraries/msal4j-1.23.1.jar;libraries/authlib-7.0.61.jar;libraries/blocklist-1.0.10.jar;libraries/brigadier-1.3.10.jar;libraries/datafixerupper-9.0.19.jar;libraries/jtracy-1.0.37.jar;libraries/jtracy-1.0.37-natives-windows.jar;libraries/logging-1.6.11.jar;libraries/patchy-2.2.10.jar;libraries/text2speech-1.18.11.jar;libraries/commons-codec-1.19.0.jar;libraries/commons-io-2.20.0.jar;libraries/netty-buffer-4.2.7.Final.jar;libraries/netty-codec-base-4.2.7.Final.jar;libraries/netty-codec-compression-4.2.7.Final.jar;libraries/netty-codec-http-4.2.7.Final.jar;libraries/netty-common-4.2.7.Final.jar;libraries/netty-handler-4.2.7.Final.jar;libraries/netty-resolver-4.2.7.Final.jar;libraries/netty-transport-classes-epoll-4.2.7.Final.jar;libraries/netty-transport-classes-kqueue-4.2.7.Final.jar;libraries/netty-transport-native-unix-common-4.2.7.Final.jar;libraries/netty-transport-4.2.7.Final.jar;libraries/fastutil-8.5.18.jar;libraries/jna-platform-5.17.0.jar;libraries/jna-5.17.0.jar;libraries/jopt-simple-5.0.4.jar;libraries/commons-compress-1.28.0.jar;libraries/commons-lang3-3.19.0.jar;libraries/log4j-api-2.25.2.jar;libraries/log4j-core-2.25.2.jar;libraries/log4j-slf4j2-impl-2.25.2.jar;libraries/jorbis-0.0.17.jar;libraries/joml-1.10.8.jar;libraries/jspecify-1.0.0.jar;libraries/lwjgl-freetype-3.3.3.jar;libraries/lwjgl-freetype-3.3.3-natives-windows.jar;libraries/lwjgl-freetype-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-freetype-3.3.3-natives-windows-x86.jar;libraries/lwjgl-glfw-3.3.3.jar;libraries/lwjgl-glfw-3.3.3-natives-windows.jar;libraries/lwjgl-glfw-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-glfw-3.3.3-natives-windows-x86.jar;libraries/lwjgl-jemalloc-3.3.3.jar;libraries/lwjgl-jemalloc-3.3.3-natives-windows.jar;libraries/lwjgl-jemalloc-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-jemalloc-3.3.3-natives-windows-x86.jar;libraries/lwjgl-openal-3.3.3.jar;libraries/lwjgl-openal-3.3.3-natives-windows.jar;libraries/lwjgl-openal-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-openal-3.3.3-natives-windows-x86.jar;libraries/lwjgl-opengl-3.3.3.jar;libraries/lwjgl-opengl-3.3.3-natives-windows.jar;libraries/lwjgl-opengl-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-opengl-3.3.3-natives-windows-x86.jar;libraries/lwjgl-stb-3.3.3.jar;libraries/lwjgl-stb-3.3.3-natives-windows.jar;libraries/lwjgl-stb-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-stb-3.3.3-natives-windows-x86.jar;libraries/lwjgl-tinyfd-3.3.3.jar;libraries/lwjgl-tinyfd-3.3.3-natives-windows.jar;libraries/lwjgl-tinyfd-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-tinyfd-3.3.3-natives-windows-x86.jar;libraries/lwjgl-3.3.3.jar;libraries/lwjgl-3.3.3-natives-windows.jar;libraries/lwjgl-3.3.3-natives-windows-arm64.jar;libraries/lwjgl-3.3.3-natives-windows-x86.jar;libraries/slf4j-api-2.0.17.jar;libraries/asm-9.9.jar;libraries/asm-analysis-9.9.jar;libraries/asm-commons-9.9.jar;libraries/asm-tree-9.9.jar;libraries/asm-util-9.9.jar;libraries/sponge-mixin-0.16.5+mixin.0.8.7.jar;libraries/intermediary-1.21.11.jar;libraries/fabric-loader-0.18.3.jar"
+set ASSET_INDEX=29
+set USERNAME=%1
+
+echo Launching Minecraft... Please wait...
+echo > New: You can now close this window without closing the game!
+
+.\java\bin\java.exe -Xmx4G -Xms1G ^
+--enable-native-access=ALL-UNNAMED ^
+-cp "%CP%" ^
+net.fabricmc.loader.impl.launch.knot.KnotClient ^
+
+--accessToken 0 ^
+--version 1.21.11 ^
+--assetsDir %CD%\assets ^
+--assetIndex %ASSET_INDEX% ^
+--username %USERNAME%
+        
