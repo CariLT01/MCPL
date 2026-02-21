@@ -17,7 +17,14 @@ import shutil
 from UploadUrl import UPLOAD_URL
 
 
-print = tqdm.write
+def print(*args):
+    """
+    Docstring for print
+    
+    :param args: Description
+    """
+    thread_context = threading.current_thread()
+    tqdm.write(f"[ {thread_context.name} ]: " + " ".join(map(str, args)))
 
 PROFILE_DIR = "SECRET/browserProfile/"
 
@@ -59,7 +66,7 @@ class UploadWorker:
                         
             self.context = p.chromium.launch_persistent_context(
                 user_data_dir=profile_directory,
-                headless=True,
+                headless=not self.loginLaunch,
                 args=["--disable-blink-features=AutomationControlled","--start-maximized"],
                 viewport=None
             )
@@ -107,38 +114,127 @@ class UploadWorker:
         print(f"> Wait for splitbuttonprimary")
         print(f"> Click on replace")
         try:
-            page.wait_for_selector('span[data-automationid="splitbuttonprimary"]', state='visible', timeout=240_000)
-            page.click('span[data-automationid="splitbuttonprimary"]')
+            
+            found = False
+            
+            try:
+                page.wait_for_selector('span[data-automationid="splitbuttonprimary"]:has-text("Replace")', state='visible', timeout=30_000)
+            except Exception as e:
+                print(">> Failed to find selector english")
+            else:
+                print(">> Found selector eng")
+                page.click('span[data-automationid="splitbuttonprimary"]:has-text("Replace")')
+                found = True
+            
+            if not found:
+                try:
+                    page.wait_for_selector('span[data-automationid="splitbuttonprimary"]:has-text("Remplacer")', state='visible', timeout=30_000)
+                    
+                except Exception as e:
+                    print(">> Failed to find selector french")
+                else:
+                    print(">> Found selector french")
+                    page.click('span[data-automationid="splitbuttonprimary"]:has-text("Remplacer")')
+                
+            
+            
+            
         except Exception as e:
             print(f"Failed to find replace button: {e}. Skipping replace button step.")
         time.sleep(5)
         print("Drop complete")
         
     def _track_progress(self):
-        self.page.wait_for_selector('div.ms-ProgressIndicator-progressBar', state='visible', timeout=240_000)
-        progress_bar = self.page.locator('div.ms-ProgressIndicator-progressBar')
-        progress_bar.wait_for(state='visible', timeout=240_000)
+        
+        chose_specific_selector = False
+        
+        while True:
+            try:
+                print(">> Waiting for progress bar selector")
+                try:
+                    self.page.wait_for_selector(
+                        'div.ms-ProgressIndicator-progressBar[role="progressbar"]',
+                        state='visible',
+                        timeout=20_000
+                    )
+                    
+                except Exception as e:
+                    print(f"timed out: {e}, trying next (#2)")
+                else:
+                    chose_specific_selector = True
+                    break
+                try:
+                    self.page.wait_for_selector(
+                        'div.ms-ProgressIndicator-progressBar',
+                        state='visible',
+                        timeout=20_000
+                    )
+                except Exception as e:
+                    print(f"timed out: {e}, trying next (#3)")
+                else:
+                    chose_specific_selector = False
+                    break
+                try:
+                    self.page.wait_for_selector(
+                        'div.ms-ProgressIndicator-progressBar[role="progressbar"]',
+                        state='visible',
+                        timeout=20_000
+                    )
+                except Exception as e:
+                    raise RuntimeError("cannot wait for pg bar: not found after 3 methods")
+                else:
+                    chose_specific_selector = True
+                    break
+            except Exception as e:
+                print(f"> Failed to wait for progress bar: {e}")
+            else:
+                break
+            time.sleep(2)
+        bars = self.page.locator('div.ms-ProgressIndicator-progressBar[role="progressbar"]' if chose_specific_selector else "div.ms-ProgressIndicator-progressBar")
+        count = bars.count()
+        
+        
+        # wait for any bar to be visible
+        
+        for barIndex in range(count):
+            bar = bars.nth(barIndex)
+            print(f">> Wait for bar {barIndex} to be visible")
+            bar.wait_for(state="visible", timeout=240_000)
+            print(f">> Bar {barIndex} is visible")
+            
         bar = tqdm(total=100, desc=f"Uploading {os.path.basename(self.file)}", position=self.index)
         last = 0
         while True:
-            
-            if not progress_bar.count():  # 0 means it's gone
-                print("Progress bar no longer in DOM. Exiting loop.")
-                break
-            
-            style = progress_bar.get_attribute('style')
-            
-            match = re.search(r'width:\s*([\d.]+%)', style or '')
-            if match:
-                width = match.group(1)
-                # print(f"Progress bar width: {width}")
-                w_perc = float(width.replace("%", ""))
-                bar.update(w_perc - last)
-                last = w_perc
+            try:
+                
+                bar_counts = bars.count()
+                
+                if bar_counts <= 0:  # 0 means it's gone
+                    print("Progress bar no longer in DOM. Exiting loop.")
+                    break
+                width_accumulated = 0
                 
                 
-            else:
-                print("Width not found in style.")
+                for barIndex in range(bar_counts):
+                    progress_bar = bars.nth(barIndex)
+                    style = progress_bar.get_attribute('style')
+                
+                    match = re.search(r'width:\s*([\d.]+%)', style or '')
+                    if match:
+                        width = match.group(1)
+                        width_accumulated += float(width.replace("%", ""))
+                        # print(f"[DBG]: Accumulate: {width} at {width_accumulated}")
+                    else:
+                        print("Width not found in style.")
+                
+                width_avg = width_accumulated / bar_counts
+                
+                bar.update(width_avg - last)
+                last = width_avg
+
+                
+            except Exception as e:
+                print(f"> Cannot update progress bar: {e}")
             time.sleep(1)
         bar.close()
                 
@@ -189,7 +285,10 @@ class TasksExecutor:
         
         for index, task in enumerate(tasks):
             print(f"Starting thread {index} for {task}")
-            t = threading.Thread(target=self._execute_task, args=(index, task))
+            path: str = task
+            
+            filename = path.split("\\")[len(path.split("\\")) - 1]
+            t = threading.Thread(target=self._execute_task, args=(index, task), name=f"Worker/{filename}")
             t.start()
             threads.append(t)
             time.sleep(0.1)

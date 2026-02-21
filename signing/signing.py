@@ -22,14 +22,19 @@ public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_bytes)
 
 name = input("Enter Attribution Name >")
 
-numberOfDays = inquirer.select(message="\nHow many days should the user be allowed to use this token?", choices=[5, 7, 14, 21, 30]).execute()
+numberOfDays = inquirer.select(message="\nHow many days should the user be allowed to use this token? (-1 = test token, 15 seconds)", choices=[5, 7, 14, 21, 30, -1]).execute()
 
 print(f"Authorized for: {numberOfDays} days")
+
+delta = datetime.timedelta(days=max(1, numberOfDays))
+if numberOfDays == -1:
+    delta = datetime.timedelta(seconds=15)
+
 
 payload = {
     "name": name,
     "iat": datetime.datetime.now(datetime.timezone.utc),
-    "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=numberOfDays)
+    "exp": datetime.datetime.now(datetime.timezone.utc) + delta
 }
 
 token = jwt.encode(payload, private_key, algorithm="EdDSA")

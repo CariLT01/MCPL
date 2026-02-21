@@ -54,7 +54,12 @@ for file in token_files:
     print(f"Building to: MC_Launcher_{filename}.exe")
     
     main_file_abs = os.path.abspath("./launcher/")
-    output_file_abs = os.path.abspath(f"./build/{VERSION_NAME}_{filename}.exe")
+    
+    v_name = VERSION_NAME
+    if "EXP" in filename:
+        v_name = "EXP"
+    
+    output_file_abs = os.path.abspath(f"./build/{v_name}_{filename}.exe")
     
     print(f"Main file: {main_file_abs}")
     print(f"Output file: {output_file_abs}")

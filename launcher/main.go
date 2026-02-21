@@ -30,9 +30,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var VERSION = "1.21.11 • Fabric 0.18.3"
+var VERSION = "1.21.11 • Fabric 0.18.4"
 var VERSION_DIR_STRING = "12111_FA0183"
-var LAUNCHER_VERSION = "L1.1.2"
+var LAUNCHER_VERSION = "L1.1.3"
 
 // REMEMBER TO CHANGE FOR TOKENS
 var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
@@ -40,6 +40,7 @@ var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
 func checkToken() {
 	pubByes, err := base64.StdEncoding.DecodeString(PUBLIC_KEY)
 	if err != nil {
+
 		os.Exit(1)
 	}
 	pubKey := ed25519.PublicKey(pubByes)
@@ -145,7 +146,6 @@ func formatSeconds(seconds int) string {
 }
 
 func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar *canvas.Rectangle, statusText *canvas.Text) error {
-	// 1. Initial UI State
 	updateProgressBarText(app, statusText, "Opening 7z archive...")
 	updateProgressBar(app, progressBar, 0)
 
@@ -155,27 +155,22 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 	}
 	defer r.Close()
 
-	// Create stringbuilder
-	var statusBuf strings.Builder
-	statusBuf.Grow(128)
-
-	// 2. Calculate total size for progress percentage
+	// Total bytes for progress
 	var totalBytes int64
 	for _, f := range r.File {
-		totalBytes += int64(f.UncompressedSize)
+		if !f.FileInfo().IsDir() {
+			totalBytes += int64(f.UncompressedSize)
+		}
 	}
 
 	var processedBytes int64
-
-	// FIX: Separate timers for Bar and Text to prevent "resetting" each other
 	lastBarUpdate := time.Now()
-
 	timeStart := time.Now()
 
-	createdDirs := make(map[string]bool)
 	destDirClean := filepath.Clean(destDir)
-	copyBuf := make([]byte, 1024*1024*8) // 4MB buffer
+	createdDirs := make(map[string]bool)
 
+	// Pre-create all directories
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			path := filepath.Join(destDirClean, f.Name)
@@ -184,88 +179,81 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 		}
 	}
 
+	// Goroutine pool
+	sem := make(chan struct{}, runtime.NumCPU())
+	var wg sync.WaitGroup
+	copyBuf := make([]byte, 8*1024*1024) // 8 MB buffer
+
 	for _, f := range r.File {
-		// Security: ZipSlip check
-		cleanName := filepath.Clean(f.Name)
-		path := filepath.Join(destDirClean, cleanName)
-		if !strings.HasPrefix(path, destDirClean+string(os.PathSeparator)) {
-			continue
-		}
-
-		// Optimization: Directory Handling
-		parentDir := filepath.Dir(path)
-		if !createdDirs[parentDir] {
-			os.MkdirAll(parentDir, 0755)
-			createdDirs[parentDir] = true
-		}
-
 		if f.FileInfo().IsDir() {
 			continue
 		}
 
-		// FIX: Update text immediately when a new file starts
-		// This ensures the filename changes even if the file is tiny.
+		wg.Add(1)
+		sem <- struct{}{} // acquire slot
 
-		// Extraction logic
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
+		go func(f *sevenzip.File) {
+			defer wg.Done()
+			defer func() { <-sem }() // release slot
 
-		fDest, err := os.Create(path)
-		if err != nil {
-			rc.Close()
-			return err
-		}
+			cleanName := filepath.Clean(f.Name)
+			path := filepath.Join(destDirClean, cleanName)
 
-		// Manual copy loop
-		for {
-			n, readErr := rc.Read(copyBuf)
-			if n > 0 {
-				if _, writeErr := fDest.Write(copyBuf[:n]); writeErr != nil {
-					fDest.Close()
-					rc.Close()
-					return writeErr
+			// Prevent ZipSlip
+			if !strings.HasPrefix(path, destDirClean+string(os.PathSeparator)) {
+				return
+			}
+
+			parentDir := filepath.Dir(path)
+			if !createdDirs[parentDir] {
+				os.MkdirAll(parentDir, 0755)
+				createdDirs[parentDir] = true
+			}
+
+			rc, err := f.Open()
+			if err != nil {
+				return
+			}
+			defer rc.Close()
+
+			dstFile, err := os.Create(path)
+			if err != nil {
+				return
+			}
+			defer dstFile.Close()
+
+			for {
+				n, readErr := rc.Read(copyBuf)
+				if n > 0 {
+					dstFile.Write(copyBuf[:n])
+					atomic.AddInt64(&processedBytes, int64(n))
+
+					// Throttled UI update
+					if time.Since(lastBarUpdate) > 50*time.Millisecond {
+						progress := float32(atomic.LoadInt64(&processedBytes)) / float32(totalBytes)
+						updateProgressBar(app, progressBar, progress)
+						lastBarUpdate = time.Now()
+
+						elapsed := time.Since(timeStart).Seconds()
+						estimatedTimeRemaining := (1 - progress) * float32(elapsed) / progress
+						formattedTime := formatSeconds(int(math.Round(float64(estimatedTimeRemaining))))
+
+						updateProgressBarText(app, statusText, fmt.Sprintf("Extracting (%s remaining): %s",
+							formattedTime, TruncateMiddle(f.Name, 32)))
+					}
 				}
-				processedBytes += int64(n)
-
-				// Throttled Progress Bar Update (every 50ms)
-				// We don't throttle the text here because we update it once per file above
-
-				if time.Since(lastBarUpdate) > 50*time.Millisecond {
-					progress := float32(processedBytes) / float32(totalBytes)
-					updateProgressBar(app, progressBar, progress)
-					lastBarUpdate = time.Now()
-
-					elapsed := time.Since(timeStart).Seconds()
-
-					estimatedTimeRemaining := (1 - progress) * float32(elapsed) / progress
-					formattedTimeRemaining := formatSeconds(int(math.Round(float64(estimatedTimeRemaining))))
-
-					statusBuf.Reset()
-					statusBuf.WriteString("Extracting (")
-					statusBuf.WriteString(formattedTimeRemaining)
-					statusBuf.WriteString(" remaining): ")
-					statusBuf.WriteString(TruncateMiddle(f.Name, 32))
-
-					updateProgressBarText(app, statusText, statusBuf.String())
+				if readErr == io.EOF {
+					break
+				}
+				if readErr != nil {
+					break
 				}
 			}
-			if readErr == io.EOF {
-				break
-			}
-			if readErr != nil {
-				fDest.Close()
-				rc.Close()
-				return readErr
-			}
-		}
-
-		fDest.Close()
-		rc.Close()
+		}(f)
 	}
 
-	// Final UI Update
+	wg.Wait()
+
 	updateProgressBarText(app, statusText, "Extraction complete!")
 	updateProgressBar(app, progressBar, 1.0)
 
@@ -344,12 +332,16 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 	modsDir := filepath.Join(gameDir, "mods")
 	launcherBatch := filepath.Join(gameDir, "launch.bat")
 	launcherExe := filepath.Join(gameDir, "launcher.exe")
+	libsDir := filepath.Join(gameDir, "libraries")
 
 	fileLock := tryLock(gameDir)
 
 	// Delete mods directory
 	if fileExists(modsDir) {
 		os.RemoveAll(modsDir)
+	}
+	if fileExists(libsDir) {
+		os.RemoveAll(libsDir)
 	}
 
 	if fileExists(launcherBatch) {
@@ -358,7 +350,6 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 
 	if fileExists(launcherExe) {
 		os.Remove(launcherExe)
-
 	}
 
 	err := extractFiles(app, progressBar, statusText)

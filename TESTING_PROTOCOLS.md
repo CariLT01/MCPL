@@ -2,8 +2,8 @@
 
 **GENERIC CHECKS**
 - Launch check: perform a launch, if it crashes: fail
-- SP check: two clients, connect, #2 disconnect, #2 reconnect, #1 disconnect. Verify state after with F3.
-- WS check: upload world, download world via code, upload world w/ code, download world via code & without code. Delete world from dashboard after.
+- SP check (optional, only if SP updated): two clients, connect, #2 disconnect, #2 reconnect, #1 disconnect. Verify state after with F3.
+- WS check (optional, only if WS updated): upload world, download world via code, upload world w/ code, download world via code & without code. Delete world from dashboard after.
 
 **TEST #1 -- NEW INSTALLATION**
 1. Delete folder if exists
@@ -17,5 +17,8 @@
 
 **TEST #3 -- RELAUNCH**
 1. After performing #2, relaunch
-2. Perform LAUNCH check and SP check and WS check (2)
+2. Perform LAUNCH check and SP check and WS check (3)
 
+**TEST #4 -- TOKEN EXP TEST**
+1. Build 5s token instance
+2. Perform LAUNCH check. Fail = success.
