@@ -1,1 +1,0 @@
-go build -ldflags="-s -w -H=windowsgui" -trimpath -x -v -o .\MinecraftPortableLauncher.exe

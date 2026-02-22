@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image/color"
@@ -16,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"io/fs"
 	"unicode/utf8"
 
 	"crypto/ed25519"
@@ -28,6 +30,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 	"github.com/bodgit/sevenzip"
+	"github.com/cespare/xxhash/v2"
 	"github.com/gofrs/flock"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/sys/windows"
@@ -57,6 +60,153 @@ func checkToken() {
 	if err != nil || !token.Valid {
 		os.Exit(1)
 	}
+}
+
+func WalkDirectoryAndHash(root string, gameDirRoot string, hashMap map[string]string) error {
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+
+			rel, err := filepath.Rel(gameDirRoot, path)
+
+			hasher := xxhash.New()
+
+			file, err := os.Open(path)
+			if err != nil {
+				showErrorLog(err, "read file")
+			}
+
+			buf := make([]byte, 32*1024)
+			for {
+				n, err := file.Read(buf)
+				if n > 0 {
+					hasher.Write(buf[:n])
+				}
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					showErrorLog(err, "fatal error while reading file")
+				}
+			}
+
+			file.Close()
+
+			h := hasher.Sum64()
+			hexDigest := fmt.Sprintf("%016x", h)
+
+			hashMap[rel] = hexDigest
+			// fmt.Printf("file path: %s hash: %s \n", rel, hexDigest)
+
+		}
+		return nil
+	})
+
+	return err
+}
+
+func ComputeDiffMaps(oldHashes map[string]string, newHashes map[string]string) ([]string, []string, []string) {
+	var toDelete, toAdd, unchanged []string
+
+	for path, hash := range oldHashes {
+		if newHash, ok := newHashes[path]; ok {
+			if newHash != hash {
+				fmt.Println("needs update: " + path)
+				toAdd = append(toAdd, path) // changed file needs update
+			} else {
+				unchanged = append(unchanged, path) // hash is identical
+			}
+		} else {
+			toDelete = append(toDelete, path)
+		}
+	}
+
+	for path, _ := range newHashes {
+		if _, ok := oldHashes[path]; !ok {
+			fmt.Println("needs add: " + path)
+			toAdd = append(toAdd, path)
+		}
+	}
+
+	fmt.Printf("statistics: delete: %s add: %s up-to-date: %s \n", len(toDelete), len(toAdd), len(unchanged))
+
+	return toDelete, toAdd, unchanged
+}
+
+func ComputeCurrentHashes() map[string]string {
+	hashMap := make(map[string]string)
+
+	exePath, _ := os.Executable()
+	gameDir := filepath.Join(filepath.Dir(exePath), VERSION_DIR_STRING)
+
+	err := WalkDirectoryAndHash(filepath.Join(gameDir, "assets/objects"), gameDir, hashMap)
+	err = WalkDirectoryAndHash(filepath.Join(gameDir, "java"), gameDir, hashMap)
+	err = WalkDirectoryAndHash(filepath.Join(gameDir, "libraries"), gameDir, hashMap)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return hashMap
+}
+
+func ReadInstallationHashes() map[string]string {
+	hashMap := make(map[string]string)
+
+	readerPosition := 0
+
+	for {
+		// read the first byte, contains the size of the path
+		size := deltaBinary[readerPosition]
+		readerPosition++
+
+		// now we should expect N bytes following
+
+		// first byte is identifier (A: asset, F: file)
+
+		identifier := deltaBinary[readerPosition]
+		readerPosition++
+
+		// read the path, which is of size N - 1
+
+		path := deltaBinary[readerPosition : readerPosition+int(size)-1]
+		readerPosition += int(size) - 1
+
+		// 8 bytes after for XXHash checksum
+
+		hash := hex.EncodeToString(deltaBinary[readerPosition : readerPosition+8])
+		readerPosition += 8
+
+		if string(identifier) == "A" {
+			// found an A identifier
+
+			// we can build the original path
+
+			hexPath := hex.EncodeToString(path)
+			// build assets path
+			assetsPath := filepath.Clean("assets/objects/" + hexPath[:2] + "/" + hexPath)
+			hashMap[assetsPath] = string(hash)
+			fmt.Printf("assets path: %s hash: %s \n", assetsPath, hash)
+
+		} else if string(identifier) == "F" {
+			// found a F identifier
+
+			cleanedPath := filepath.Clean(string(path))
+			hashMap[cleanedPath] = string(hash)
+			fmt.Printf("file path: %s hash: %s \n", cleanedPath, hash)
+		}
+
+		// at the end check
+		if readerPosition >= len(deltaBinary) {
+			break
+		}
+
+	}
+
+	return hashMap
 }
 
 func TruncateMiddle(s string, maxLen int) string {
@@ -148,9 +298,21 @@ func formatSeconds(seconds int) string {
 	return fmt.Sprintf("%02d:%02d", minutes, secs)
 }
 
-func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar *canvas.Rectangle, statusText *canvas.Text) error {
+func sliceToMap(elements []string) map[string]struct{} {
+	// Pre-allocate map size to avoid re-allocations during growth
+	m := make(map[string]struct{}, len(elements))
+
+	for _, s := range elements {
+		m[filepath.Clean(s)] = struct{}{}
+	}
+	return m
+}
+
+func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar *canvas.Rectangle, statusText *canvas.Text, needToExtract []string) error {
 	updateProgressBarText(app, statusText, "Opening 7z archive...")
 	updateProgressBar(app, progressBar, 0)
+
+	var needToExtractSet map[string]struct{} = sliceToMap(needToExtract)
 
 	r, err := sevenzip.OpenReader(src7z)
 	if err != nil {
@@ -178,6 +340,7 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			path := filepath.Join(destDirClean, f.Name)
+
 			os.MkdirAll(path, 0755)
 			createdDirs[path] = true
 		}
@@ -192,6 +355,13 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		relative := f.Name
+
+		if _, ok := needToExtractSet[filepath.Clean(relative)]; !ok {
+			fmt.Println("Skipping: " + relative)
 			continue
 		}
 
@@ -337,11 +507,27 @@ func showErrorLog(err error, while string) {
 	showError("Application Error during an operation: "+while, "Application error that may or may not be fatal depending on the context.\nOperation: "+while+"\nError: "+err.Error())
 }
 
+func DeleteFiles(paths []string, gameDir string) {
+
+	for _, path := range paths {
+		if fileExists(path) {
+			fmt.Println("Deleting: " + path)
+			os.Remove(filepath.Join(gameDir, path))
+		}
+	}
+}
+
 func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text) {
+
+	installationHashes := ReadInstallationHashes()
+	currentHashes := ComputeCurrentHashes()
+	needsDelete, needsAdd, _ := ComputeDiffMaps(currentHashes, installationHashes)
 
 	exePath, _ := os.Executable()
 	baseDir := filepath.Dir(exePath)
 	gameDir := filepath.Join(baseDir, VERSION_DIR_STRING)
+
+	DeleteFiles(needsDelete, gameDir)
 
 	modsDir := filepath.Join(gameDir, "mods")
 	launcherBatch := filepath.Join(gameDir, "launch.bat")
@@ -373,7 +559,7 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 
 	tmpPath := filepath.Join(baseDir, "tmp.7z")
 
-	err = unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText)
+	err = unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText, needsAdd)
 	if err != nil {
 		showErrorLog(err, "extract files")
 	}
