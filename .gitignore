@@ -46,3 +46,21 @@ SECRET
 
 # Don't include link
 UploadUrl.py
+
+delta.bin
+compressionList.txt
+skippable.bin
+
+launcher/static.7z
+launcher/unskippable.bin
+launcher/dynamic.7z
+launcher/delta.bin
+
+# Ignore everything in mods
+dist/mods/*
+# But keep parent dirs
+!dist/
+!dist/mods/
+# Keep specific JARs
+!dist/mods/stealthpipe-*.jar
+!dist/mods/world-sync-*.jar

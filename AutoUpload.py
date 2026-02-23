@@ -280,7 +280,7 @@ class TasksExecutor:
     
     def execute_tasks(self):
         tasks = self._get_files(self.build_directory)
-        
+        tasks.reverse()
         threads: list[threading.Thread] = []
         
         for index, task in enumerate(tasks):

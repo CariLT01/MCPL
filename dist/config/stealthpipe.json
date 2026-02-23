@@ -1,0 +1,9 @@
+{
+  "RELAY_IP": "https://mcpipeservice-go.onrender.com",
+  "RELAY_PING_ATTEMPTS": 5,
+  "ONLINE_MODE": false,
+  "CONNECTION_SUFFIX": ".stealth.link",
+  "MOD_VERSION": "4.0.0",
+  "ENABLE_BATCHED_PACKETS": true,
+  "PACKET_BATCHING_INTERVAL_MS": 1
+}

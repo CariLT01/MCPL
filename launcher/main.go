@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,7 +40,7 @@ import (
 
 var VERSION = "1.21.11 • Fabric 0.18.4"
 var VERSION_DIR_STRING = "12111_FA0183"
-var LAUNCHER_VERSION = "L1.1.4"
+var LAUNCHER_VERSION = "L1.1.6"
 
 // REMEMBER TO CHANGE FOR TOKENS
 var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
@@ -62,50 +64,102 @@ func checkToken() {
 	}
 }
 
-func WalkDirectoryAndHash(root string, gameDirRoot string, hashMap map[string]string) error {
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
+	hasher := xxhash.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%016x", hasher.Sum64()), nil
+}
 
-			rel, err := filepath.Rel(gameDirRoot, path)
+func WalkDirectoryAndHash(root string, gameDirRoot string, hashMap map[string]string, app fyne.App, statusText *canvas.Text) error {
+	type result struct {
+		path string
+		hash string
+	}
 
-			hasher := xxhash.New()
+	absPath, err := filepath.Abs(root)
 
-			file, err := os.Open(path)
-			if err != nil {
-				showErrorLog(err, "read file")
-			}
+	if err != nil {
+		return err
+	}
 
-			buf := make([]byte, 32*1024)
-			for {
-				n, err := file.Read(buf)
-				if n > 0 {
-					hasher.Write(buf[:n])
-				}
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					showErrorLog(err, "fatal error while reading file")
-				}
-			}
-
-			file.Close()
-
-			h := hasher.Sum64()
-			hexDigest := fmt.Sprintf("%016x", h)
-
-			hashMap[rel] = hexDigest
-			// fmt.Printf("file path: %s hash: %s \n", rel, hexDigest)
-
-		}
+	if !fileExists(absPath) {
 		return nil
-	})
+	}
 
-	return err
+	paths := make(chan string, 100)
+	results := make(chan result, 100)
+	var wg sync.WaitGroup
+
+	var processed atomic.Int64
+
+	processed.Store(0)
+
+	done := make(chan struct{})
+
+	// 1. Start Workers
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range paths {
+				h, err := hashFile(path) // Helper function to hash a single file
+				if err != nil {
+					showErrorLog(err, "failed to hash file")
+					continue
+				}
+				processed.Add(1)
+				rel, _ := filepath.Rel(gameDirRoot, path)
+				results <- result{rel, h}
+			}
+		}()
+	}
+
+	// start status text update
+	go func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				count := processed.Load()
+				updateProgressBarText(app, statusText, fmt.Sprintf("Enumerating local objects in '%s': %d files", root, count))
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	// 2. Start Walker
+	go func() {
+		filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if !d.IsDir() {
+				paths <- path
+			}
+			return nil
+		})
+		close(paths)
+	}()
+
+	// 3. Closer & Collector
+	go func() {
+		wg.Wait()
+		close(results)
+		close(done)
+	}()
+
+	for res := range results {
+		hashMap[res.path] = res.hash
+	}
+
+	return nil
 }
 
 func ComputeDiffMaps(oldHashes map[string]string, newHashes map[string]string) ([]string, []string, []string) {
@@ -131,20 +185,20 @@ func ComputeDiffMaps(oldHashes map[string]string, newHashes map[string]string) (
 		}
 	}
 
-	fmt.Printf("statistics: delete: %s add: %s up-to-date: %s \n", len(toDelete), len(toAdd), len(unchanged))
+	fmt.Printf("statistics: delete: %d add: %d up-to-date: %d \n", len(toDelete), len(toAdd), len(unchanged))
 
 	return toDelete, toAdd, unchanged
 }
 
-func ComputeCurrentHashes() map[string]string {
+func ComputeCurrentHashes(app fyne.App, statusText *canvas.Text) map[string]string {
 	hashMap := make(map[string]string)
 
 	exePath, _ := os.Executable()
 	gameDir := filepath.Join(filepath.Dir(exePath), VERSION_DIR_STRING)
 
-	err := WalkDirectoryAndHash(filepath.Join(gameDir, "assets/objects"), gameDir, hashMap)
-	err = WalkDirectoryAndHash(filepath.Join(gameDir, "java"), gameDir, hashMap)
-	err = WalkDirectoryAndHash(filepath.Join(gameDir, "libraries"), gameDir, hashMap)
+	err := WalkDirectoryAndHash(filepath.Join(gameDir, "assets"), gameDir, hashMap, app, statusText)
+	err = WalkDirectoryAndHash(filepath.Join(gameDir, "java"), gameDir, hashMap, app, statusText)
+	err = WalkDirectoryAndHash(filepath.Join(gameDir, "libraries"), gameDir, hashMap, app, statusText)
 
 	if err != nil {
 		fmt.Println(err)
@@ -209,6 +263,35 @@ func ReadInstallationHashes() map[string]string {
 	return hashMap
 }
 
+func ReadUnskippableFiles() []string {
+	fmt.Println("Read unskippable binary")
+	unskippableFiles := make([]string, 0, 32)
+
+	readerPosition := 0
+
+	for {
+		size := unskippableBinary[readerPosition]
+		readerPosition++
+
+		path := unskippableBinary[readerPosition : readerPosition+int(size)]
+		readerPosition += int(size)
+
+		unskippableFiles = append(unskippableFiles, filepath.Clean(string(path)))
+
+		// fmt.Println("Unskippable: " + string(path))
+
+		if readerPosition >= len(unskippableBinary) {
+			break
+		}
+
+	}
+
+	fmt.Println("finish unskippable binary read")
+
+	return unskippableFiles
+
+}
+
 func TruncateMiddle(s string, maxLen int) string {
 	// 1. Check if truncation is even necessary
 	if utf8.RuneCountInString(s) <= maxLen {
@@ -246,10 +329,10 @@ func updateProgressBarText(app fyne.App, statusText *canvas.Text, value string) 
 	}, false)
 }
 
-func extractFiles(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text) error {
+func extractFiles(file embed.FS, fileName string, app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text) error {
 	updateProgressBarText(app, statusText, "Unpacking...")
 
-	src, err := installationZipFile.Open("data.7z")
+	src, err := file.Open(fileName)
 
 	if err != nil {
 		return err
@@ -258,7 +341,7 @@ func extractFiles(app fyne.App, progressBar *canvas.Rectangle, statusText *canva
 	defer src.Close()
 
 	exePath, _ := os.Executable()
-	installPath := filepath.Join(filepath.Dir(exePath), "tmp.7z")
+	installPath := filepath.Join(filepath.Dir(exePath), fileName+".tmp.7z")
 
 	dst, err := os.Create(installPath)
 	if err != nil {
@@ -303,16 +386,20 @@ func sliceToMap(elements []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(elements))
 
 	for _, s := range elements {
+		// fmt.Println("add: " + s)
 		m[filepath.Clean(s)] = struct{}{}
 	}
 	return m
 }
 
-func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar *canvas.Rectangle, statusText *canvas.Text, needToExtract []string) error {
-	updateProgressBarText(app, statusText, "Opening 7z archive...")
+func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar *canvas.Rectangle, statusText *canvas.Text, needToExtract []string, upToDate int) error {
+	updateProgressBarText(app, statusText, "Opening 7z archive... (due to solid compression, this might take a minute or two)")
 	updateProgressBar(app, progressBar, 0)
 
 	var needToExtractSet map[string]struct{} = sliceToMap(needToExtract)
+
+	processed := 0
+	enumerated := 0
 
 	r, err := sevenzip.OpenReader(src7z)
 	if err != nil {
@@ -358,11 +445,22 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 			continue
 		}
 
-		relative := f.Name
+		relative := strings.ReplaceAll(f.Name, "zzzzassets", "assets")
+		enumerated++
 
-		if _, ok := needToExtractSet[filepath.Clean(relative)]; !ok {
-			fmt.Println("Skipping: " + relative)
+		if processed >= len(needToExtract) {
+			// we have extracted everything
+			fmt.Println("statistics: enumerated: " + strconv.Itoa(enumerated) + " processed: " + strconv.Itoa(processed))
+			break
+		}
+
+		if _, exists := needToExtractSet[filepath.Clean(relative)]; !exists {
+			fmt.Println("Skipping: " + relative + " processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(len(needToExtract)))
 			continue
+		} else {
+
+			processed++
+			fmt.Println("Extracting: " + relative + "processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(len(needToExtract)))
 		}
 
 		wg.Add(1)
@@ -398,7 +496,7 @@ func unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 			}
 			defer rc.Close()
 
-			dstFile, err := os.Create(path)
+			dstFile, err := os.Create(strings.ReplaceAll(path, "zzzzassets", "assets"))
 			if err != nil {
 				return
 			}
@@ -519,9 +617,20 @@ func DeleteFiles(paths []string, gameDir string) {
 
 func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text) {
 
+	fmt.Println("read installation hashes")
+	updateProgressBarText(app, statusText, "Retrieving instance installation hash map...")
 	installationHashes := ReadInstallationHashes()
-	currentHashes := ComputeCurrentHashes()
-	needsDelete, needsAdd, _ := ComputeDiffMaps(currentHashes, installationHashes)
+	fmt.Println("read current hashes")
+	updateProgressBarText(app, statusText, "Computing current installation hashes...")
+	currentHashes := ComputeCurrentHashes(app, statusText)
+	fmt.Println("compute diff")
+	updateProgressBarText(app, statusText, "Performing differential integrity analysis...")
+	needsDelete, needsAdd, upToDate := ComputeDiffMaps(currentHashes, installationHashes)
+
+	fmt.Println("merge")
+
+	updateProgressBarText(app, statusText, "Retrieving persistent installation files...")
+	unskippableFiles := ReadUnskippableFiles()
 
 	exePath, _ := os.Executable()
 	baseDir := filepath.Dir(exePath)
@@ -541,7 +650,7 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 		os.RemoveAll(modsDir)
 	}
 	if fileExists(libsDir) {
-		os.RemoveAll(libsDir)
+		// os.RemoveAll(libsDir)
 	}
 
 	if fileExists(launcherBatch) {
@@ -552,21 +661,50 @@ func setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 		os.Remove(launcherExe)
 	}
 
-	err := extractFiles(app, progressBar, statusText)
-	if err != nil {
-		showErrorLog(err, "unpack files")
+	if len(needsAdd) > 0 {
+		fmt.Println("Missing assets: needs add")
+
+		fileName := "static.7z"
+		fileNameTmp := "static.7z.tmp.7z"
+
+		err := extractFiles(staticZipFile, fileName, app, progressBar, statusText)
+		if err != nil {
+			showErrorLog(err, "unpack files static")
+		}
+
+		tmpPath := filepath.Join(baseDir, fileNameTmp)
+
+		err = unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText, needsAdd, len(upToDate))
+		if err != nil {
+			showErrorLog(err, "extract files")
+		}
+		err = os.Remove(fileNameTmp)
+		if err != nil {
+			showErrorLog(err, "remove tmp.7z")
+		}
 	}
 
-	tmpPath := filepath.Join(baseDir, "tmp.7z")
+	// dynamic data unpack
 
-	err = unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText, needsAdd)
+	fileNameDyn := "dynamic.7z"
+	fileNameDynTmp := "dynamic.7z.tmp.7z"
+
+	err := extractFiles(dyamicZipFile, fileNameDyn, app, progressBar, statusText)
+	if err != nil {
+		showErrorLog(err, "unpack files dynamic")
+	}
+
+	tmpPath := filepath.Join(baseDir, fileNameDynTmp)
+
+	err = unzip7zWithProgress(app, tmpPath, gameDir, progressBar, statusText, unskippableFiles, len(upToDate))
 	if err != nil {
 		showErrorLog(err, "extract files")
 	}
-	err = os.Remove("tmp.7z")
+	err = os.Remove(fileNameDynTmp)
 	if err != nil {
-		showErrorLog(err, "remove tmp.7z")
+		showErrorLog(err, "remove dyn.7z")
 	}
+
 	fileLock.Unlock()
 	markInstallationComplete(gameDir)
 }
@@ -743,11 +881,11 @@ func main() {
 		licenseLabel.TextSize = 16
 		licenseLabel.Move(fyne.NewPos(12, 250))
 
-		multiplayerNote := canvas.NewText("Changelog: update dependencies and make extraction significantly faster", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		multiplayerNote := canvas.NewText("Changelog: update dependencies, make extraction faster", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
 		multiplayerNote.TextSize = 12
 		multiplayerNote.Move(fyne.NewPos(12, 300))
 
-		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 8517 lines of code", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 8898 lines of code", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
 		funFactText.TextSize = 12
 		funFactText.Move(fyne.NewPos(12, 320))
 
