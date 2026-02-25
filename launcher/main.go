@@ -40,7 +40,7 @@ import (
 
 var VERSION = "1.21.11 • Fabric 0.18.4"
 var VERSION_DIR_STRING = "12111_FA0183"
-var LAUNCHER_VERSION = "L1.1.6"
+var LAUNCHER_VERSION = "L1.1.7"
 
 // REMEMBER TO CHANGE FOR TOKENS
 var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
@@ -881,11 +881,11 @@ func main() {
 		licenseLabel.TextSize = 16
 		licenseLabel.Move(fyne.NewPos(12, 250))
 
-		multiplayerNote := canvas.NewText("Changelog: update dependencies, make extraction faster", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		multiplayerNote := canvas.NewText("Changelog: update dependencies, improve runtime wrapper", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
 		multiplayerNote.TextSize = 12
 		multiplayerNote.Move(fyne.NewPos(12, 300))
 
-		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 8898 lines of code", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 9384 lines of code", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
 		funFactText.TextSize = 12
 		funFactText.Move(fyne.NewPos(12, 320))
 
