@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"image/color"
+	"image/draw"
 	"io"
 	"math"
 	"os"
@@ -19,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	_ "image/png"
+
 	"io/fs"
 	"unicode/utf8"
 
@@ -28,19 +32,21 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/bodgit/sevenzip"
 	"github.com/cespare/xxhash/v2"
 	"github.com/gofrs/flock"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/sys/windows"
+	"image"
 )
 
 var VERSION = "1.21.11 • Fabric 0.18.4"
 var VERSION_DIR_STRING = "12111_FA0183"
-var LAUNCHER_VERSION = "L1.1.7"
+var LAUNCHER_VERSION = "L1.1.8"
 
 // REMEMBER TO CHANGE FOR TOKENS
 var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
@@ -62,6 +68,31 @@ func checkToken() {
 	if err != nil || !token.Valid {
 		os.Exit(1)
 	}
+}
+
+type glassTheme struct {
+	fyne.Theme
+}
+
+func (m *glassTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	switch name {
+	// This removes the "white border" / background of the PopUp
+	case theme.ColorNameBackground:
+		return color.Transparent
+	// Semi-transparent background for Entry fields
+	case theme.ColorNameInputBackground:
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 40}
+	// Semi-transparent background for Buttons
+	case theme.ColorNameButton:
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 60}
+	// Make the cursor/text slightly more visible against the blur
+	case theme.ColorNameForeground:
+		return color.White
+	case theme.ColorNamePlaceHolder:
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 150} // Slightly faded white
+	}
+
+	return m.Theme.Color(name, variant)
 }
 
 func hashFile(path string) (string, error) {
@@ -130,7 +161,7 @@ func WalkDirectoryAndHash(root string, gameDirRoot string, hashMap map[string]st
 			select {
 			case <-ticker.C:
 				count := processed.Load()
-				updateProgressBarText(app, statusText, fmt.Sprintf("Enumerating local objects in '%s': %d files", root, count))
+				updateProgressBarText(app, statusText, fmt.Sprintf("Enumerating local objects in: %d files", count))
 			case <-done:
 				return
 			}
@@ -573,27 +604,99 @@ func launchGame(username string) {
 	os.Exit(0)
 }
 
-func askAndLaunch(window fyne.Window) {
-	// 1. Create the input field
+func askAndLaunch(window fyne.Window, blurredBg image.Image) {
 	usernameEntry := widget.NewEntry()
 	usernameEntry.SetPlaceHolder("Username")
 
-	// 2. Create the Dialog
-	inputDialog := dialog.NewForm("Username (Offline): ", "Confirm", "Cancel", []*widget.FormItem{
-		{Text: "Username", Widget: usernameEntry},
-	}, func(confirm bool) {
-		if confirm {
-			// User clicked "Confirm"
-			launchGame(usernameEntry.Text)
-		} else {
-			os.Exit(0)
-		}
-	}, window)
+	dialogSize := fyne.NewSize(400, 220)
+	dialogPos := fyne.NewPos(
+		(window.Canvas().Size().Width-dialogSize.Width)/2,
+		(window.Canvas().Size().Height-dialogSize.Height)/2,
+	)
 
-	// 3. Show it
-	inputDialog.Resize(fyne.NewSize(400, 250))
-	inputDialog.Show()
+	// Inner content
+	content := container.NewVBox(
+		widget.NewLabelWithStyle("Username:", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		usernameEntry,
+		layout.NewSpacer(),
+		container.NewHBox(
+			layout.NewSpacer(),
+			widget.NewButton("Play", func() { launchGame(usernameEntry.Text) }),
+			widget.NewButton("Cancel", func() { os.Exit(0) }),
+			layout.NewSpacer(),
+		),
+	)
 
+	// THE "GLASS" STACK
+	// We use a MaxLayout to ensure the background fills the entire PopUp area
+	canvasSize := window.Canvas().Size()
+
+	// THE "GLASS" STACK
+	glassContainer := container.NewStack(
+		// Added canvasSize here ---------------------------------------v
+		createBlurredBackground(blurredBg, dialogPos, dialogSize, canvasSize),
+		canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 25}),
+		container.NewPadded(content),
+	)
+
+	// APPLY CUSTOM THEME: This is the magic part
+	// Wrap the glassContainer in our custom theme override
+	themedContent := container.NewThemeOverride(glassContainer, &glassTheme{Theme: theme.DefaultTheme()})
+
+	// 1. Manually set the size and position on your themed content
+	themedContent.Resize(dialogSize)
+	themedContent.Move(dialogPos)
+
+	// 2. Wrap it in a container without a layout so it respects your exact X/Y coordinates
+	customOverlay := container.NewWithoutLayout(themedContent)
+
+	// 3. Update the Cancel button to close the overlay instead of exiting the app (optional, but good practice)
+	// You'll need to update the button definition in your `content` VBox to do this:
+	// widget.NewButton("Cancel", func() {
+	//     window.Canvas().Overlays().Remove(customOverlay)
+	// })
+
+	// 4. Add it directly to the window overlays, bypassing widget.PopUp entirely
+	window.Canvas().Overlays().Add(customOverlay)
+}
+
+func createBlurredBackground(blurredBg image.Image, pos fyne.Position, size fyne.Size, canvasSize fyne.Size) fyne.CanvasObject {
+	imgBounds := blurredBg.Bounds()
+	imgW, imgH := float32(imgBounds.Dx()), float32(imgBounds.Dy())
+
+	// 1. Calculate ratios (Units to Pixels)
+	scaleX := imgW / canvasSize.Width
+	scaleY := imgH / canvasSize.Height
+
+	// 2. Map coordinates
+	x := int(pos.X * scaleX)
+	y := int(pos.Y * scaleY)
+	w := int(size.Width * scaleX)
+	h := int(size.Height * scaleY)
+
+	// 3. Clamp bounds
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	if x+w > int(imgW) {
+		w = int(imgW) - x
+	}
+	if y+h > int(imgH) {
+		h = int(imgH) - y
+	}
+
+	// 4. THE FIX: Draw the crop into a NEW image to reset the (0,0) origin
+	// This prevents the "bottom-right shift" issue
+	resetImg := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(resetImg, resetImg.Bounds(), blurredBg, image.Pt(x, y), draw.Src)
+
+	img := canvas.NewImageFromImage(resetImg)
+	img.FillMode = canvas.ImageFillStretch
+
+	return img
 }
 
 func fileExists(filename string) bool {
@@ -781,8 +884,25 @@ func tryLock(path string) *flock.Flock {
 	return fileLock
 }
 
+func resourceToImage(res *fyne.StaticResource) (image.Image, error) {
+	// StaticResource embeds []byte in res.StaticContent
+	reader := bytes.NewReader(res.StaticContent)
+
+	img, _, err := image.Decode(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
+}
+
 func initializeApp(app fyne.App, window fyne.Window, progressBar *canvas.Rectangle, statusText *canvas.Text) {
 	time.Sleep(200 * time.Millisecond)
+
+	img, err := resourceToImage(resourceLauncherbackgroundblurredPng)
+	if err != nil {
+		showErrorLog(err, "decode blurred background")
+	}
 
 	exePath, _ := os.Executable()
 	baseDir := filepath.Dir(exePath)
@@ -839,10 +959,10 @@ If you wish to cancel, close the launcher window. Otherwise, the installation wi
 
 	if brokenInstallation == false && installationFound == true {
 
-		askAndLaunch(window)
+		askAndLaunch(window, img)
 	} else {
 		setup(app, progressBar, statusText)
-		askAndLaunch(window)
+		askAndLaunch(window, img)
 	}
 }
 
@@ -864,41 +984,41 @@ func main() {
 		background.FillMode = canvas.ImageFillContain
 		background.Resize(fyne.NewSize(640, 400))
 
-		softwareTitleText := canvas.NewText("MCPL "+LAUNCHER_VERSION, color.Black)
+		softwareTitleText := canvas.NewText("MCPL "+LAUNCHER_VERSION, color.White)
 		softwareTitleText.TextStyle = fyne.TextStyle{Bold: true}
 		softwareTitleText.TextSize = 48
 		softwareTitleText.Move(fyne.NewPos(10, 20))
 
-		softwareDetails := canvas.NewText("Java Edition • Game Launcher", color.Black)
+		softwareDetails := canvas.NewText("Java Edition • Game Launcher", color.White)
 		softwareDetails.TextSize = 18
 		softwareDetails.Move(fyne.NewPos(12, 85))
 
-		softwareVersion := canvas.NewText("Version: "+VERSION, color.NRGBA{R: 0, G: 0, B: 0, A: 128})
+		softwareVersion := canvas.NewText("Version: "+VERSION, color.NRGBA{R: 255, G: 255, B: 255, A: 128})
 		softwareVersion.TextSize = 16
 		softwareVersion.Move(fyne.NewPos(12, 230))
-		licenseLabel := canvas.NewText("Personal Copy — Avoid Sharing", color.Black)
+		licenseLabel := canvas.NewText("Personal Copy — Avoid Sharing", color.White)
 		licenseLabel.TextStyle = fyne.TextStyle{Bold: false}
 		licenseLabel.TextSize = 16
 		licenseLabel.Move(fyne.NewPos(12, 250))
 
-		multiplayerNote := canvas.NewText("Changelog: update dependencies, improve runtime wrapper", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		multiplayerNote := canvas.NewText("Changelog: add a cool background", color.NRGBA{R: 255, G: 255, B: 255, A: 80})
 		multiplayerNote.TextSize = 12
 		multiplayerNote.Move(fyne.NewPos(12, 300))
 
-		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 9384 lines of code", color.NRGBA{R: 0, G: 0, B: 0, A: 80})
+		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 9904 lines of code", color.NRGBA{R: 255, G: 255, B: 255, A: 80})
 		funFactText.TextSize = 12
 		funFactText.Move(fyne.NewPos(12, 320))
 
-		statusText := canvas.NewText("Launching...", color.Black)
+		statusText := canvas.NewText("Launching...", color.White)
 		statusText.TextSize = 12
 		statusText.Move(fyne.NewPos(5, 373))
 
-		progressBarBackgroundRect := canvas.NewRectangle(color.NRGBA{R: 0, G: 0, B: 0, A: 25})
+		progressBarBackgroundRect := canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 25})
 		progressBarBackgroundRect.CornerRadius = 9999999
 		progressBarBackgroundRect.Resize(fyne.NewSize(630, 5))
 		progressBarBackgroundRect.Move(fyne.NewPos(5, 390))
 
-		progressBarValueRect := canvas.NewRectangle(color.Black)
+		progressBarValueRect := canvas.NewRectangle(color.White)
 		progressBarValueRect.Resize(fyne.NewSize(0, 5))
 		progressBarValueRect.CornerRadius = 9999999
 		progressBarValueRect.Move(fyne.NewPos(5, 390))
