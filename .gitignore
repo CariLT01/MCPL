@@ -64,3 +64,5 @@ dist/mods/*
 # Keep specific JARs
 !dist/mods/stealthpipe-*.jar
 !dist/mods/world-sync-*.jar
+
+launcher/src/data/bin/*
