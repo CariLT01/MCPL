@@ -66,3 +66,5 @@ dist/mods/*
 !dist/mods/world-sync-*.jar
 
 launcher/src/data/bin/*
+launcher/src/data/token.go
+launcher/src/data/token.go_copy.txt
