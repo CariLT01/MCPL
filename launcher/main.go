@@ -52,11 +52,11 @@ func main() {
 		licenseLabel.TextSize = 16
 		licenseLabel.Move(fyne.NewPos(12, 250))
 
-		multiplayerNote := canvas.NewText("Changelog: add a cool background", color.NRGBA{R: 255, G: 255, B: 255, A: 80})
+		multiplayerNote := canvas.NewText("Changelog: internal refactoring", color.NRGBA{R: 255, G: 255, B: 255, A: 80})
 		multiplayerNote.TextSize = 12
 		multiplayerNote.Move(fyne.NewPos(12, 300))
 
-		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 9904 lines of code", color.NRGBA{R: 255, G: 255, B: 255, A: 80})
+		funFactText := canvas.NewText("Fun fact: MCPL and its tooling has 10223 lines of code", color.NRGBA{R: 255, G: 255, B: 255, A: 80})
 		funFactText.TextSize = 12
 		funFactText.Move(fyne.NewPos(12, 320))
 
