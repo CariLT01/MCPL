@@ -66,7 +66,7 @@ for file in token_files:
     print(f"Building MC_Launcher_{filename}.exe ...")
 
     os.system(
-        f'go build -ldflags="-s -w -H=windowsgui" -trimpath -o {output_file_abs} {main_file_abs}'
+        f'go build -ldflags="-s -w -H=windowsgui" -trimpath -o {output_file_abs} -v {main_file_abs}'
     )
 
     os.chdir(current_cwd)

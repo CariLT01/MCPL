@@ -6,6 +6,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"image"
+
+	_ "image/png"
 )
 
 func CreateBlurredBackground(blurredBg image.Image, pos fyne.Position, size fyne.Size, canvasSize fyne.Size) fyne.CanvasObject {
