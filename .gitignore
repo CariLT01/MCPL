@@ -61,10 +61,8 @@ dist/mods/*
 # But keep parent dirs
 !dist/
 !dist/mods/
-# Keep specific JARs
-!dist/mods/stealthpipe-*.jar
-!dist/mods/world-sync-*.jar
 
 launcher/src/data/bin/*
 launcher/src/data/token.go
 launcher/src/data/token.go_copy.txt
+
