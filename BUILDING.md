@@ -1,5 +1,7 @@
 # Creating Your Environment (Very Detailed Guide)
 
+**If you plan to fork this project, please see LICENSE**
+
 > [!WARNING]
 > The process described below involves several technical steps. If you have never worked with developer tools before, follow every instruction carefully and do not skip steps.
 
