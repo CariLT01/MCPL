@@ -11,9 +11,7 @@ Custom tooling to get Minecraft Java edition to run portably in a single self-ex
 # Features
 - **Fully self-contained**: Not dependent on DLLs, system files, or any other system library. All libraries are statically linked.
 - **Secure Distribution**: Allows copies to expire to limit distribution, with secure tokens signed with the modern digital signing algorithm: EdDSA.
-- **Fully offline**: Compiled clients do not need to download files from Mojang, allowing it to run even on restricted networks and decreasing initial startup time.
-- **Resilient Open to LAN multiplayer**: StealthPipe (included by default, can be removed) allows Open to LAN to work on hostile networks. See the other repository for more info.
-- **Resilient to Reverse Engineering**: Symbols are stripped automatically from the final production build
+- **Fully offline**: Not dependent on any server or even the Internet.
 
 > [!NOTE]
 > Due to the fully offline nature of MCPL, a prebuilt EXE cannot be distributed, as that would violate copyright laws.
