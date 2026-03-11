@@ -30,3 +30,5 @@ This tool was made to be used with lawful purposes, such as for entertainment on
 
 # License
 These tools are licensed under the MIT license. You may fork, redistribute, and modify it for personal or commercial purposes.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
