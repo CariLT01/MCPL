@@ -5,6 +5,9 @@
 > [!WARNING]
 > The process described below involves several technical steps. If you have never worked with developer tools before, follow every instruction carefully and do not skip steps.
 
+> [!NOTE]
+> You must own a copy of Minecraft: Java Edition to build and use MCPL!
+
 This guide explains how to create your own portable `.EXE` launcher for personal use.
 
 The overall process is:
