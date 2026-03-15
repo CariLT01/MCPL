@@ -10,7 +10,7 @@ Custom tooling to get Minecraft Java edition to run portably in a single self-ex
 
 # Features
 - **Fully self-contained**: Not dependent on DLLs, system files, or any other system library. All libraries are statically linked.
-- **Secure Distribution**: Allows copies to expire to limit distribution, with secure tokens signed with the modern digital signing algorithm: EdDSA.
+- **Offline Signing**: Uses secure tokens signed with the modern digital signing algorithm: EdDSA.
 - **Fully offline**: Not dependent on any server or even the Internet.
 
 > [!NOTE]
@@ -19,9 +19,6 @@ Custom tooling to get Minecraft Java edition to run portably in a single self-ex
 # Building
 
 Please see BUILDING.md to create your own launcher!
-
-# Distribution
-It is strongly recommended to not widely distribute it, as it may get you in trouble from violating local rules and enforcement or law enforcement depending on your region, or you may receive DMCAs from Mojang/Microsoft. If you wish to use this, please use it for yourself only and avoid uploading it or sharing it on the Internet.
 
 # Legal Notice
 This tool was made to be used with lawful purposes, such as for entertainment on devices that may potentially collect sensitive information such as credentials. We do not support or encourage piracy of any kind.
