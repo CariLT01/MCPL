@@ -5,6 +5,7 @@ go 1.24.5
 require (
 	fyne.io/fyne/v2 v2.7.1
 	github.com/bodgit/sevenzip v1.6.1
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/gofrs/flock v0.13.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	golang.org/x/sys v0.40.0
@@ -16,7 +17,6 @@ require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
