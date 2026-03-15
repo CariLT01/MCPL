@@ -6,7 +6,7 @@
 > [!NOTE]
 > MCPL is only available for Windows at the moment.
 
-Custom tooling to get Minecraft Java edition to run portably in a single self-extracting launcher/installer. Developed originally as an experiment to see if it was possible to run Minecraft: Java Edition on a school computer (the answer was yes). These tools will help you create a portable EXE that will be able to run Minecraft on any Windows computer. This repository does not include any assets or code from Mojang, there are scripts inside that are dedicated to downloading them and setting up the environment.
+Custom tooling to get Minecraft Java edition to run portably in a single self-extracting launcher/installer. These tools will help you create a portable EXE that will be able to run Minecraft on any Windows computer. This repository does not include any assets or code from Mojang, there are scripts inside that are dedicated to downloading them and setting up the environment.
 
 # Features
 - **Fully self-contained**: Not dependent on DLLs, system files, or any other system library. All libraries are statically linked.
