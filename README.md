@@ -14,7 +14,7 @@ Custom tooling to get Minecraft Java edition to run portably in a single self-ex
 - **Fully offline**: Not dependent on any server or even the Internet.
 
 > [!NOTE]
-> Due to the fully offline nature of MCPL, a prebuilt EXE cannot be distributed, as that would violate copyright laws.
+> Due to the fully offline nature of MCPL, a prebuilt EXE cannot be distributed.
 
 # Building
 
