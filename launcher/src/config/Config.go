@@ -2,7 +2,8 @@ package config
 
 var VERSION = "1.21.11 • Fabric 0.18.4"
 var VERSION_DIR_STRING = "12111_FA0183"
-var LAUNCHER_VERSION = "L1.1.13"
+var LAUNCHER_VERSION = "L1.1.14"
+var LAUNCHER_CHANGELOG = "Changelog: update dependencies"
 
 // REMEMBER TO CHANGE FOR TOKENS
 var PUBLIC_KEY = "7MIyc6g3LVbRU1mvqy+qZKqn3DT7cerlu9jAMJg17/M="
