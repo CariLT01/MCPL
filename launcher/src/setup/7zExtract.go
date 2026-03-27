@@ -43,19 +43,17 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 	}
 
 	var processedBytes int64
+	var atomicProcessedFiles int64
 	timeStart := time.Now()
 	destDirClean := filepath.Clean(destDir)
 
-	// Use a Mutex for thread-safe map access and UI timing
 	var mu sync.Mutex
 	lastBarUpdate := time.Now()
 	createdDirs := make(map[string]bool)
 
-	// Pre-create all directories (Synchronous is fine here)
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			path := filepath.Join(destDirClean, f.Name)
-
 			os.MkdirAll(path, 0755)
 			createdDirs[path] = true
 		}
@@ -68,6 +66,8 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 	sem := make(chan struct{}, workerCount)
 	var wg sync.WaitGroup
 
+	totalFilesToExtract := len(needToExtract)
+
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -76,19 +76,17 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 		relative := strings.ReplaceAll(f.Name, "zzzzassets", "assets")
 		enumerated++
 
-		if processed >= len(needToExtract) {
-			// we have extracted everything
+		if processed >= totalFilesToExtract {
 			fmt.Println("statistics: enumerated: " + strconv.Itoa(enumerated) + " processed: " + strconv.Itoa(processed))
 			break
 		}
 
 		if _, exists := needToExtractSet[filepath.Clean(relative)]; !exists {
-			fmt.Println("Skipping: " + relative + " processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(len(needToExtract)))
+			fmt.Println("Skipping: " + relative + " processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(totalFilesToExtract))
 			continue
 		} else {
-
 			processed++
-			fmt.Println("Extracting: " + relative + "processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(len(needToExtract)))
+			fmt.Println("Extracting: " + relative + "processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(totalFilesToExtract))
 		}
 
 		wg.Add(1)
@@ -98,19 +96,15 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			// FIX 1: Each goroutine MUST have its own buffer
-			copyBuf := make([]byte, 1024*1024) // 32KB is usually plenty for I/O
-
+			copyBuf := make([]byte, 1024*1024)
 			path := filepath.Join(destDirClean, filepath.Clean(f.Name))
 
-			// Prevent ZipSlip
 			if !strings.HasPrefix(path, destDirClean+string(os.PathSeparator)) {
 				return
 			}
 
 			parentDir := filepath.Dir(path)
 
-			// FIX 2: Thread-safe directory checking
 			mu.Lock()
 			if !createdDirs[parentDir] {
 				os.MkdirAll(parentDir, 0755)
@@ -134,16 +128,20 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 				n, readErr := rc.Read(copyBuf)
 				if n > 0 {
 					dstFile.Write(copyBuf[:n])
-					newProcessed := atomic.AddInt64(&processedBytes, int64(n))
+					newProcessedBytes := atomic.AddInt64(&processedBytes, int64(n))
 
-					// FIX 3: Thread-safe UI throttling
 					mu.Lock()
 					if time.Since(lastBarUpdate) > 100*time.Millisecond {
-						progress := float32(newProcessed) / float32(totalBytes)
+						var progress float32
+						if upToDate != 0 && totalFilesToExtract > 0 {
+							progress = float32(atomic.LoadInt64(&atomicProcessedFiles)) / float32(totalFilesToExtract)
+						} else {
+							progress = float32(newProcessedBytes) / float32(totalBytes)
+						}
+
 						ui.UpdateProgressBar(app, progressBar, progress)
 
 						elapsed := time.Since(timeStart).Seconds()
-						// Avoid division by zero
 						if progress > 0 {
 							remaining := (1 - progress) * float32(elapsed) / progress
 							formattedTime := utils.FormatSeconds(int(math.Round(float64(remaining))))
@@ -155,6 +153,7 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 					mu.Unlock()
 				}
 				if readErr == io.EOF {
+					atomic.AddInt64(&atomicProcessedFiles, 1)
 					break
 				}
 				if readErr != nil {

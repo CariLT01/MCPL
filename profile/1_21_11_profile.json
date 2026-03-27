@@ -1,8 +1,8 @@
 {
-    "version": "1.21.11",
+    "version": "26.1",
     "loader": {
         "loaderName": "fabric",
-        "loaderVersion": "0.18.4"
+        "loaderVersion": "0.18.5"
     },
     "java": "java25"
 }
