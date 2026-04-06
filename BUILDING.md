@@ -595,7 +595,7 @@ token.go
 Paste the following code inside:
 
 ```go
-package main
+package data
 
 var ISSUED_TOKEN = "YOUR_TOKEN_HERE"
 ```
