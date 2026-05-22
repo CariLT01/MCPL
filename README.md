@@ -21,7 +21,7 @@ Custom tooling to get Minecraft Java edition to run portably in a single self-ex
 Please see BUILDING.md to create your own launcher!
 
 # Legal Notice
-This tool was made to be used with lawful purposes, such as for entertainment on devices that may potentially collect sensitive information such as credentials. We do not support or encourage piracy of any kind.
+This tool was made to be used with lawful purposes. We do not support or encourage piracy of any kind.
 
 # License
 These tools are licensed under the MIT license. You may fork, redistribute, and modify it for personal or commercial purposes.
