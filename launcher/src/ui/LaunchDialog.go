@@ -44,6 +44,12 @@ func AskAndLaunch(window fyne.Window, blurredBg image.Image) {
 	// We use a MaxLayout to ensure the background fills the entire PopUp area
 	canvasSize := window.Canvas().Size()
 
+	// THE FIX: If the UI thread hasn't finished the initial layout pass,
+	// canvasSize will be 0x0. Fallback to the splash screen default size.
+	if canvasSize.Width <= 0 || canvasSize.Height <= 0 {
+		canvasSize = fyne.NewSize(640, 400)
+	}
+
 	// THE "GLASS" STACK
 	glassContainer := container.NewStack(
 		// Added canvasSize here ---------------------------------------v

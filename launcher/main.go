@@ -7,6 +7,8 @@ import (
 	"mc-portable-launcher/src/config"
 	"mc-portable-launcher/src/data"
 	"mc-portable-launcher/src/exp"
+	"mc-portable-launcher/src/ui"
+	"time"
 
 	_ "image/png"
 
@@ -77,6 +79,11 @@ func main() {
 		go appInit.InitializeApp(launcherApp, launcherWindow, progressBarValueRect, statusText)
 
 		content := container.NewWithoutLayout(background, softwareTitleText, softwareDetails, softwareVersion, licenseLabel, multiplayerNote, funFactText, statusText, progressBarBackgroundRect, progressBarValueRect)
+
+		// progress bar animation
+		frameAnimation := fyne.NewAnimation(time.Second, ui.ProgressBarSizeAnimationCallback)
+		frameAnimation.RepeatCount = fyne.AnimationRepeatForever
+		frameAnimation.Start()
 
 		launcherWindow.SetContent(content)
 		launcherWindow.Resize(fyne.NewSize(640, 400))

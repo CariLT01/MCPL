@@ -1,1 +1,1 @@
-go build -x -v -o .\MinecraftPortableLauncher.exe
+go build -v -o .\MinecraftPortableLauncher.exe

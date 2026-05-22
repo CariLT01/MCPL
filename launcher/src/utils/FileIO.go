@@ -15,9 +15,14 @@ func FileExists(filename string) bool {
 func DeleteFiles(paths []string, gameDir string) {
 
 	for _, path := range paths {
-		if FileExists(path) {
-			fmt.Println("Deleting: " + path)
-			os.Remove(filepath.Join(gameDir, path))
+
+		realFilePath := filepath.Join(gameDir, path)
+
+		if FileExists(realFilePath) {
+			// fmt.Println("Deleting: " + realFilePath)
+			os.Remove(realFilePath)
+		} else {
+			fmt.Println("File does not exist and cannot be deleted: " + realFilePath)
 		}
 	}
 }

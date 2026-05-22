@@ -22,10 +22,29 @@ func Setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 
 	fmt.Println("read installation hashes")
 	ui.UpdateProgressBarText(app, statusText, "Retrieving instance installation hash map...")
-	installationHashes := diff.ReadInstallationHashes()
+	installationHashes := diff.ReadInstallationHashes(data.DeltaBinary)
 	fmt.Println("read current hashes")
 	ui.UpdateProgressBarText(app, statusText, "Computing current installation hashes...")
-	currentHashes := diff.ComputeCurrentHashes(app, statusText)
+
+	exePath, _ := os.Executable()
+	baseDir := filepath.Dir(exePath)
+	gameDir := filepath.Join(baseDir, config.VERSION_DIR_STRING)
+	hashesCacheFile := filepath.Join(gameDir, "deltaCache.dat")
+
+	currentHashes := make(map[string]string)
+
+	if utils.FileExists(hashesCacheFile) {
+
+		content, err := os.ReadFile(hashesCacheFile)
+		if err != nil {
+			ux.ShowErrorLog(err, "failed to read cache, please delete it")
+			return
+		}
+		currentHashes = diff.ReadInstallationHashes(content)
+	} else {
+		currentHashes = diff.ComputeCurrentHashes(app, statusText)
+	}
+
 	fmt.Println("compute diff")
 	ui.UpdateProgressBarText(app, statusText, "Performing differential integrity analysis...")
 	needsDelete, needsAdd, upToDate := diff.ComputeDiffMaps(currentHashes, installationHashes)
@@ -34,10 +53,6 @@ func Setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 
 	ui.UpdateProgressBarText(app, statusText, "Retrieving persistent installation files...")
 	unskippableFiles := diff.ReadUnskippableFiles()
-
-	exePath, _ := os.Executable()
-	baseDir := filepath.Dir(exePath)
-	gameDir := filepath.Join(baseDir, config.VERSION_DIR_STRING)
 
 	utils.DeleteFiles(needsDelete, gameDir)
 
@@ -106,6 +121,12 @@ func Setup(app fyne.App, progressBar *canvas.Rectangle, statusText *canvas.Text)
 	err = os.Remove(fileNameDynTmp)
 	if err != nil {
 		ux.ShowErrorLog(err, "remove dyn.7z")
+	}
+
+	// write cache
+	err = os.WriteFile(hashesCacheFile, data.DeltaBinary, 0644)
+	if err != nil {
+		ux.ShowErrorLog(err, "Failed to write cache, future updates will be slower")
 	}
 
 	fileLock.Unlock()

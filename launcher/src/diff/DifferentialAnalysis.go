@@ -166,31 +166,31 @@ func ComputeCurrentHashes(app fyne.App, statusText *canvas.Text) map[string]stri
 	return hashMap
 }
 
-func ReadInstallationHashes() map[string]string {
+func ReadInstallationHashes(binaryData []byte) map[string]string {
 	hashMap := make(map[string]string)
 
 	readerPosition := 0
 
 	for {
 		// read the first byte, contains the size of the path
-		size := data.DeltaBinary[readerPosition]
+		size := binaryData[readerPosition]
 		readerPosition++
 
 		// now we should expect N bytes following
 
 		// first byte is identifier (A: asset, F: file)
 
-		identifier := data.DeltaBinary[readerPosition]
+		identifier := binaryData[readerPosition]
 		readerPosition++
 
 		// read the path, which is of size N - 1
 
-		path := data.DeltaBinary[readerPosition : readerPosition+int(size)-1]
+		path := binaryData[readerPosition : readerPosition+int(size)-1]
 		readerPosition += int(size) - 1
 
 		// 8 bytes after for XXHash checksum
 
-		hash := hex.EncodeToString(data.DeltaBinary[readerPosition : readerPosition+8])
+		hash := hex.EncodeToString(binaryData[readerPosition : readerPosition+8])
 		readerPosition += 8
 
 		if string(identifier) == "A" {
@@ -213,7 +213,7 @@ func ReadInstallationHashes() map[string]string {
 		}
 
 		// at the end check
-		if readerPosition >= len(data.DeltaBinary) {
+		if readerPosition >= len(binaryData) {
 			break
 		}
 

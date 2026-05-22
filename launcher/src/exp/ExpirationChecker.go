@@ -15,7 +15,7 @@ import (
 func CheckToken() {
 	pubByes, err := base64.StdEncoding.DecodeString(config.PUBLIC_KEY)
 	if err != nil {
-
+		fmt.Println("Cannot decode public key")
 		os.Exit(1)
 	}
 	pubKey := ed25519.PublicKey(pubByes)
@@ -27,6 +27,7 @@ func CheckToken() {
 		return pubKey, nil
 	})
 	if err != nil || !token.Valid {
+		fmt.Println("Invalid token: ", err)
 		os.Exit(1)
 	}
 }

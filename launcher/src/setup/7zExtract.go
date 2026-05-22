@@ -89,6 +89,11 @@ func Unzip7zWithProgress(app fyne.App, src7z string, destDir string, progressBar
 			fmt.Println("Extracting: " + relative + "processed: " + strconv.Itoa(processed) + "/" + strconv.Itoa(totalFilesToExtract))
 		}
 
+		if f.Name == "options.txt" && utils.FileExists(filepath.Join(destDirClean, filepath.Clean(f.Name))) {
+			fmt.Println("Skip extracting options.txt, already exists")
+			continue
+		}
+
 		wg.Add(1)
 		sem <- struct{}{}
 

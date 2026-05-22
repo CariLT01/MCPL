@@ -81,9 +81,12 @@ If you wish to cancel, close the launcher window. Otherwise, the installation wi
 
 	if brokenInstallation == false && installationFound == true {
 
+		ui.UpdateProgressBar(app, progressBar, 1.0)
 		ui.AskAndLaunch(window, img)
 	} else {
+		ui.UpdateProgressBar(app, progressBar, 0.0)
 		setup.Setup(app, progressBar, statusText)
+		ui.UpdateProgressBar(app, progressBar, 1.0)
 		ui.AskAndLaunch(window, img)
 	}
 }
