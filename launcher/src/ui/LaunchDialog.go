@@ -50,24 +50,53 @@ func AskAndLaunch(window fyne.Window, blurredBg image.Image) {
 		canvasSize = fyne.NewSize(640, 400)
 	}
 
-	// THE "GLASS" STACK
+	const glassRadius float32 = 16.0
+	const blurRadius int = 12        // Adjust for a wider/softer shadow spread
+	const shadowIntensity uint8 = 35 // Scale up or down to darken/lighten
+
+	// 1. Generate the true blurred shadow texture
+	shadowImgRaw := GenerateBlurredShadow(int(dialogSize.Width), int(dialogSize.Height), glassRadius, blurRadius, shadowIntensity)
+	glassShadow := canvas.NewImageFromImage(shadowImgRaw)
+	glassShadow.FillMode = canvas.ImageFillStretch
+
+	// 2. Define the offset padding needed to prevent shadow clipping
+	shadowPad := float32(blurRadius * 2)
+
+	// 3. Build your glass pane stack (Without the shadow inside it)
+	glassTint := canvas.NewRectangle(color.NRGBA{R: 0, G: 0, B: 0, A: 15}) // Bumped up slightly to pop from shadow
+	glassTint.CornerRadius = glassRadius
+
+	glassBorder := canvas.NewRectangle(color.Transparent)
+	glassBorder.StrokeColor = color.NRGBA{R: 255, G: 255, B: 255, A: 60}
+	glassBorder.StrokeWidth = 1.0
+	glassBorder.CornerRadius = glassRadius
+
 	glassContainer := container.NewStack(
-		// Added canvasSize here ---------------------------------------v
 		CreateBlurredBackground(blurredBg, dialogPos, dialogSize, canvasSize),
-		canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 25}),
+		glassTint,
+		glassBorder,
 		container.NewPadded(content),
 	)
 
-	// APPLY CUSTOM THEME: This is the magic part
-	// Wrap the glassContainer in our custom theme override
 	themedContent := container.NewThemeOverride(glassContainer, &glassTheme{Theme: theme.DefaultTheme()})
-
-	// 1. Manually set the size and position on your themed content
 	themedContent.Resize(dialogSize)
-	themedContent.Move(dialogPos)
 
-	// 2. Wrap it in a container without a layout so it respects your exact X/Y coordinates
-	customOverlay := container.NewWithoutLayout(themedContent)
+	// Position the glass pane strictly inside the center of your overlay frame
+	themedContent.Move(fyne.NewPos(shadowPad, shadowPad))
+
+	// 4. Position and size the shadow background to extend cleanly beyond the dialog borders
+	glassShadow.Resize(fyne.NewSize(dialogSize.Width+(shadowPad*2), dialogSize.Height+(shadowPad*2)))
+	glassShadow.Move(fyne.NewPos(0, 0))
+
+	// 5. Wrap them together in a canvas that accounts for the combined size
+	dialogWrapper := container.NewWithoutLayout(glassShadow, themedContent)
+	dialogWrapper.Resize(fyne.NewSize(dialogSize.Width+(shadowPad*2), dialogSize.Height+(shadowPad*2)))
+
+	// Shift the wrapper coordinate backward by the padding size so the dialog hits your exact original target coordinates
+	dialogWrapper.Move(fyne.NewPos(dialogPos.X-shadowPad, dialogPos.Y-shadowPad))
+
+	customOverlay := container.NewWithoutLayout(dialogWrapper)
+	window.Canvas().Overlays().Add(customOverlay)
 
 	// 3. Update the Cancel button to close the overlay instead of exiting the app (optional, but good practice)
 	// You'll need to update the button definition in your `content` VBox to do this:

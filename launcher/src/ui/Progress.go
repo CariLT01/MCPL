@@ -11,14 +11,28 @@ import (
 var targetPercentage atomic.Uint32 = atomic.Uint32{}
 var globalPg *canvas.Rectangle
 var currentValueTween float32 = 0.0
-var k float32 = 0.1
+var k float32 = 0.95
 
-// Track the total loop progression to keep a smooth timeline for the indeterminate state
+// Tracks continuous time for the indeterminate loop
 var indeterminateTime float32 = 0.0
 
 const maxTrackWidth float32 = 630.0
 const trackXOffset float32 = 5.0
 const trackYPos float32 = 390.0
+
+// Ideal width during the middle of the track
+const minBarWidth float32 = 32.0
+
+// preciseMaterialEase approximates standard cubic-bezier(0.4, 0.0, 0.2, 1.0)
+func preciseMaterialEase(t float32) float32 {
+	if t <= 0 {
+		return 0
+	}
+	if t >= 1 {
+		return 1
+	}
+	return t * t * (2.5 - 1.5*t)
+}
 
 func ProgressBarSizeAnimationCallback(progress float32) {
 	if globalPg == nil {
@@ -27,45 +41,72 @@ func ProgressBarSizeAnimationCallback(progress float32) {
 
 	targetFloat := math.Float32frombits(targetPercentage.Load())
 
-	// CASE 1: Indeterminate Mode (Target is 0)
+	// CASE 1: Symmetric Contained Indeterminate Mode
 	if targetFloat == 0 {
-		// Increment a running loop counter slightly each frame.
-		// Since progress ticks 0.0 -> 1.0 periodically, we accumulate over time.
-		indeterminateTime += 0.03
-		if indeterminateTime > 2*math.Pi {
-			indeterminateTime -= 2 * math.Pi
+		// Pacing velocity. Adjust this to change the loop duration.
+		indeterminateTime += 0.012
+		cycleProgress := float32(math.Mod(float64(indeterminateTime), 1.0))
+
+		// 1. Calculate the Leading Edge (Head)
+		headFactor := preciseMaterialEase(cycleProgress * 1.5)
+		headX := trackXOffset + (headFactor * maxTrackWidth)
+
+		// 2. Calculate the Trailing Edge (Tail)
+		tailFactor := preciseMaterialEase((cycleProgress - 0.15) * 1.4)
+		tailX := trackXOffset + (tailFactor * maxTrackWidth)
+
+		// 3. Dynamic Scale Window (Symmetric Entry and Exit)
+		// We dynamically restrict the max allowed minimum width depending on where
+		// we are in the cycle so it can't snap open on the left or stick on the right.
+		allowedMinWidth := minBarWidth
+
+		if cycleProgress < 0.25 {
+			// Entrance Phase: Scale up from 0 to minBarWidth over the first 25%
+			entranceFactor := cycleProgress / 0.25
+			allowedMinWidth = minBarWidth * entranceFactor
+		} else if cycleProgress > 0.75 {
+			// Exit Phase: Scale down from minBarWidth to 0 over the last 25%
+			exitFactor := (1.0 - cycleProgress) / 0.25
+			allowedMinWidth = minBarWidth * exitFactor
 		}
 
-		// 1. Give the bar a fixed modern width (e.g., 30% of the maximum track width)
-		indeterminateWidth := maxTrackWidth * 0.3
-		globalPg.Resize(fyne.NewSize(indeterminateWidth, 5))
+		// 4. Enforce Boundaries
+		if tailX < trackXOffset {
+			tailX = trackXOffset
+		}
+		if headX > trackXOffset+maxTrackWidth {
+			headX = trackXOffset + maxTrackWidth
+		}
 
-		// 2. Map a sine wave (-1 to 1) to a clean 0 to 1 range
-		// This creates a smooth "slow down at the edges" modern easing feel
-		normalizedSine := (float32(math.Sin(float64(indeterminateTime))) + 1.0) / 2.0
+		currentWidth := headX - tailX
 
-		// 3. Calculate the available space to travel across
-		travelDistance := maxTrackWidth - indeterminateWidth
-		newX := trackXOffset + (normalizedSine * travelDistance)
+		// Clamp the width to our dynamic limits and adjust position anchors
+		if currentWidth < allowedMinWidth {
+			currentWidth = allowedMinWidth
+			if headX >= trackXOffset+maxTrackWidth {
+				// Pin to right edge when collapsing outward
+				tailX = (trackXOffset + maxTrackWidth) - currentWidth
+			} else {
+				// Pin to left edge / tail position when scaling inward
+				headX = tailX + currentWidth
+			}
+		}
 
-		// 4. Update the object's position across the track
-		globalPg.Move(fyne.NewPos(newX, trackYPos))
+		// --- GEOMETRY UPDATE ---
+		globalPg.Resize(fyne.NewSize(currentWidth, 5))
+		globalPg.Move(fyne.NewPos(tailX, trackYPos))
 		globalPg.Refresh()
 
-		// Reset the normal tween baseline to 0 so it's ready when loading starts
 		currentValueTween = 0.0
 		return
 	}
 
 	// CASE 2: Determinate Mode (Target > 0)
-	// Force the position back to the beginning of the track if it was previously animating
 	if globalPg.Position().X != trackXOffset {
 		globalPg.Move(fyne.NewPos(trackXOffset, trackYPos))
 	}
 
-	// Your standard exponential decay easing
 	currentValueTween = targetFloat + (currentValueTween-targetFloat)*k
-
 	globalPg.Resize(fyne.NewSize(maxTrackWidth*currentValueTween, 5))
 	globalPg.Refresh()
 }
